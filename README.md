@@ -1,82 +1,36 @@
-import { useState } from 'react';
-import Swal from 'sweetalert2';
-import EmailInput from '../EmailInput/EmailInput';
-import PasswordInput from '../PasswordInput/passwordInput';
-import Logo from '/img/svgs/logoprogressao.png';
-import { useAvatar } from '../../Context/AvatarContext'; // Ajuste o caminho conforme necessário
+const jwt = require('jsonwebtoken');
+const User = require('../models/user.js');
+const { dispatchQuery } = require('../path/to/dbConfig'); // Ajuste o caminho
 
-function LoginForm({ serverIP }) {
-    const [userEmail, setUserEmail] = useState('');
-    const [userPassword, setUserPassword] = useState('');
-    const [loginError, setLoginError] = useState(false);
-    const { setAvatar } = useAvatar(); // Hook para acessar o contexto de avatar
-
-    const handleSubmit = async (event) => {
-        event.preventDefault();
-
-        try {
-            const response = await fetch(`${serverIP}/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ userEmail: userEmail, userPassword: userPassword })
-            });
-
-            const data = await response.json();
-            console.log('Resposta da API:', data); 
-
-            if (response.ok) {
-                sessionStorage.setItem('token', data.token);
-                sessionStorage.setItem('userId', data.userId);
-
-                // Defina o avatar logo após o login
-                if (data.avatarPath) {
-                    setAvatar(data.avatarPath);
-                    sessionStorage.setItem('avatar', data.avatarPath); // Opcional
-                }
-
-                if (data.isFirstAccess) {
-                    Swal.fire({
-                        title: 'Aviso!',
-                        text: 'Por favor, altere sua senha após o primeiro acesso.',
-                        icon: 'warning',
-                        confirmButtonText: 'OK',
-                    }).then(() => {
-                        window.location.href = '/update';
-                    });
-                } else {
-                    window.location.href = '/missoes';
-                }
-            } else {
-                setLoginError(true);
-                console.log('Falha no login:', data.message);
-            }
-        } catch (error) {
-            console.error('Erro ao fazer login:', error);
-            alert("Ocorreu um erro ao fazer login. Por favor, tente novamente.");
+async function login(req, res) {
+    const { userEmail, userPassword } = req.body;
+    try {
+        const user = await User.authenticateUser(userEmail, userPassword);
+        if (!user) {
+            return res.status(401).json({ auth: false, message: 'Credenciais inválidas' });
         }
-    };
+        
+        const token = jwt.sign({ userId: user.ID_COLABORADOR }, 'secreto', { expiresIn: '1h' });
+        let isFirstAccess = false;
 
-    return (
-        <div className="login-container">
-            <form className='login-form' onSubmit={handleSubmit}>
-                <img src={Logo} className="vivo-icon" alt="vivo icon" />
-                <EmailInput
-                    value={userEmail}
-                    onChange={setUserEmail}
-                />
-                <PasswordInput
-                    state={userPassword}
-                    onChange={setUserPassword}
-                    placeholder={"Insira sua senha"}
-                    showRegexError={false}
-                />
-                <button type='submit'>Acessar</button>
-            </form>
-            {loginError && <p className="login-error">Email ou senha incorretos</p>}
-        </div>
-    );
+        if (userPassword === user.ID_COLABORADOR) {
+            isFirstAccess = true;
+        }
+
+        const avatarQuery = `
+            SELECT avatarPath 
+            FROM UserAvatars 
+            WHERE ID_Avatar IN (SELECT ID_Avatar FROM AVATAR_do_COLABORADOR WHERE ID_COLABORADOR = ${user.ID_COLABORADOR})
+        `;
+        
+        const avatarResult = await dispatchQuery(avatarQuery);
+        const avatarPath = avatarResult.length > 0 ? avatarResult[0].avatarPath : null;
+
+        res.status(200).json({ auth: true, isFirstAccess, token, userId: user.ID_COLABORADOR, avatarPath });
+    } catch (err) {
+        console.error('Erro no login:', err);
+        res.status(500).json({ auth: false, message: 'Erro interno do servidor' });
+    }
 }
 
-export default LoginForm;
+module.exports = { login };
