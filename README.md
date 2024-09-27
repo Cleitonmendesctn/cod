@@ -1,51 +1,82 @@
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const User = require('../models/user.js');
-const sql = require('mssql/msnodesqlv8'); // Certifique-se de que está importando corretamente
+import { useState } from 'react';
+import Swal from 'sweetalert2';
+import EmailInput from '../EmailInput/EmailInput';
+import PasswordInput from '../PasswordInput/passwordInput';
+import Logo from '/img/svgs/logoprogressao.png';
+import { useAvatar } from '../../Context/AvatarContext'; // Ajuste o caminho conforme necessário
 
-async function login(req, res) {
-    const { userEmail, userPassword } = req.body;
-    try {
-        const user = await User.authenticateUser(userEmail, userPassword);
-        if (!user) {
-            return res.status(401).json({ auth: false, message: 'Credenciais inválidas' });
-        }
-        
-        const token = jwt.sign({ userId: user.ID_COLABORADOR }, 'secreto', { expiresIn: '1h' });
+function LoginForm({ serverIP }) {
+    const [userEmail, setUserEmail] = useState('');
+    const [userPassword, setUserPassword] = useState('');
+    const [loginError, setLoginError] = useState(false);
+    const { setAvatar } = useAvatar(); // Hook para acessar o contexto de avatar
 
-        let isFirstAccess = false;
-        if (userPassword === user.ID_COLABORADOR) {
-            isFirstAccess = true;
-        } else {
-            console.log('Login efetuado');
-        }
+    const handleSubmit = async (event) => {
+        event.preventDefault();
 
-        // Buscar o avatar do usuário
-        const avatarResult = await sql.connect(dbConfig)
-            .then(pool => {
-                return pool.request()
-                    .input('userId', sql.Int, user.ID_COLABORADOR)
-                    .query('SELECT avatarPath FROM UserAvatars WHERE ID_Avatar IN (SELECT ID_Avatar FROM AVATAR_do_COLABORADOR WHERE ID_COLABORADOR = @userId)');
+        try {
+            const response = await fetch(`${serverIP}/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userEmail: userEmail, userPassword: userPassword })
             });
 
-        const avatarPath = avatarResult.recordset.length > 0 ? avatarResult.recordset[0].avatarPath : null;
+            const data = await response.json();
+            console.log('Resposta da API:', data); 
 
-        // Inclua o userId e avatarPath na resposta JSON
-        res.status(200).json({ 
-            auth: true, 
-            isFirstAccess, 
-            token, 
-            userId: user.ID_COLABORADOR, 
-            avatarPath, // Adicione o caminho do avatar aqui
-            message: 'Login bem-sucedido' 
-        });
+            if (response.ok) {
+                sessionStorage.setItem('token', data.token);
+                sessionStorage.setItem('userId', data.userId);
 
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ auth: false, message: 'Erro interno do servidor' });
-    }
+                // Defina o avatar logo após o login
+                if (data.avatarPath) {
+                    setAvatar(data.avatarPath);
+                    sessionStorage.setItem('avatar', data.avatarPath); // Opcional
+                }
+
+                if (data.isFirstAccess) {
+                    Swal.fire({
+                        title: 'Aviso!',
+                        text: 'Por favor, altere sua senha após o primeiro acesso.',
+                        icon: 'warning',
+                        confirmButtonText: 'OK',
+                    }).then(() => {
+                        window.location.href = '/update';
+                    });
+                } else {
+                    window.location.href = '/missoes';
+                }
+            } else {
+                setLoginError(true);
+                console.log('Falha no login:', data.message);
+            }
+        } catch (error) {
+            console.error('Erro ao fazer login:', error);
+            alert("Ocorreu um erro ao fazer login. Por favor, tente novamente.");
+        }
+    };
+
+    return (
+        <div className="login-container">
+            <form className='login-form' onSubmit={handleSubmit}>
+                <img src={Logo} className="vivo-icon" alt="vivo icon" />
+                <EmailInput
+                    value={userEmail}
+                    onChange={setUserEmail}
+                />
+                <PasswordInput
+                    state={userPassword}
+                    onChange={setUserPassword}
+                    placeholder={"Insira sua senha"}
+                    showRegexError={false}
+                />
+                <button type='submit'>Acessar</button>
+            </form>
+            {loginError && <p className="login-error">Email ou senha incorretos</p>}
+        </div>
+    );
 }
 
-module.exports = {
-    login
-};
+export default LoginForm;
