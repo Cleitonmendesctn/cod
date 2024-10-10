@@ -5,6 +5,8 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import '../BoxPerfil/boxperfil.css';
 
+import Notifications from '../../Notificação/Notifications'; 
+import fetchUserNotifications from '../../../services/notifications/fetchUserNotifications';
 
 function BoxPerfil({ serverIP, avatar }) {
   const [nivel, setNivel] = useState('');
@@ -12,6 +14,7 @@ function BoxPerfil({ serverIP, avatar }) {
   const [moedas, setMoedas] = useState('');
   const [userName, setUsername] = useState('');
   const [currentAvatar, setCurrentAvatar] = useState(usuario);
+  const [notifications, setNotifications] = useState([]);
 
   const token = sessionStorage.getItem('token');
 
@@ -27,46 +30,60 @@ function BoxPerfil({ serverIP, avatar }) {
         });
         const data = await response.json();
         setUsername(data.NOME);
-        sessionStorage.setItem('username', data.NOME);
         setMoedas(data.MOEDAS);
-        sessionStorage.setItem('usermoedas', data.MOEDAS);
         setNivel(data.NIVEL);
-        sessionStorage.setItem('usernivel', data.NIVEL);
         setXp(data.XP);
-        sessionStorage.setItem('userxp', data.XP);
       } catch (error) {
         console.log('Erro ao buscar os dados:', error);
       }
     }
 
     fetchData();
-  }, [serverIP]);
+  }, [serverIP, token]);
 
   useEffect(() => {
-    const handleStorageChange = (event) => {
-      if (event.key === 'avatar') {
-        setCurrentAvatar(event.newValue || usuario);
-        //console.log('avatar atualizado no storage', event.newValue);
+    async function fetchNotifications() {
+      try {
+        const response = await fetchUserNotifications({ token, serverIP });
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Notificações recebidas:', data);
+          setNotifications(data);
+        } else {
+          console.error('Erro ao buscar notificações:', response.statusText);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar notificações:', error);
       }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    const storedAvatar = sessionStorage.getItem('avatar');
-    if(storedAvatar){
-      setCurrentAvatar(storedAvatar);
-      //console.log('avatar inicial do localstorage')
     }
 
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+    fetchNotifications();
+  }, [token, serverIP]);
+
+  useEffect(() => {
+    if (avatar) {
+      setCurrentAvatar(avatar);
+    } else {
+      setCurrentAvatar(usuario);
+    }
+  }, [avatar]);
+
+  // Função para remover notificação da lista
+  const handleExclusion = (idNotification) => {
+    setNotifications((prevNotifications) => 
+      prevNotifications.filter(notification => notification.ID_NOTIFICACAO !== idNotification)
+    );
+  };
 
   return (
     <div>
       <Link to="/Perfil" style={{ textDecoration: 'none' }}>
         <header className="header-perfil">
+          <Notifications 
+            notification={notifications} 
+            handleExclusion={handleExclusion} // Chama a função para excluir a notificação
+            serverIP={serverIP}
+          />
           <img className="icon-usuario" src={currentAvatar} alt="usuario" />
           <div className="info">
             <div className="nome-e-nivel">
