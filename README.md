@@ -1,10 +1,12 @@
-const handleExcludeNotification = async () => {
-    const token = sessionStorage.getItem('token');
-    const response = await fetchDeleteNotification({ token, notification: notification?.ID_NOTIFICACAO, serverIP });
-
-    if (!response.ok) {
-        alert('Erro ao excluir notificação');
-    } else {
-        handleExclusion(notification?.ID_NOTIFICACAO); // Chama a função passada como prop
+export default async function fetchDeleteNotification({token, notificationId, serverIP}) {
+    try {
+        const response = await fetch(`${serverIP}/deleteNotification/${notificationId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'x-access-token': token }
+        });
+        return response;
+    } catch (error) {
+        console.error(error);
+        return null;
     }
-};
+}
