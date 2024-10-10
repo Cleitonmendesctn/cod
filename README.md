@@ -1,60 +1,108 @@
-import fetchReadNotification from "../../../services/notifications/fetchReadNotification";
-import { FaTrash } from "react-icons/fa6";
-import fetchDeleteNotification from "../../../services/notifications/fetchDeleteNotification";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import usuario from '/img/svgs/avatarmasculino.png';
+import BarraProgresso from '../Progresso/BarraProgresso';
+import coin from '/img/svgs/Dolar_Dinero_Moneda_1Light.svg';
+import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import '../BoxPerfil/boxperfil.css';
 
-export default function NotificationItem({ serverIP, notification, handleExclusion }) {
-    const navigate = useNavigate();
-    const [isRead, setIsRead] = useState(notification?.STATUS_LEITURA);
+import Notifications from '../../Notificação/Notifications'; 
+import fetchUserNotifications from '../../../services/notifications/fetchUserNotifications';
 
-    const handleOnClick = async (e) => {
-        if (!notification?.STATUS_LEITURA) {
-            const token = sessionStorage.getItem('token');
-            const response = await fetchReadNotification(token, notification?.ID_NOTIFICACAO);
-            if (!response.ok) alert("Erro ao ler notificação");
-            else setIsRead(true);
-        }
-        if (notification.REFERENCIA.path) navigate('/' + notification.REFERENCIA.path);
-    };
+function BoxPerfil({ serverIP, avatar }) {
+  const [nivel, setNivel] = useState('');
+  const [xp, setXp] = useState('');
+  const [moedas, setMoedas] = useState('');
+  const [userName, setUsername] = useState('');
+  const [currentAvatar, setCurrentAvatar] = useState(usuario);
+  const [notifications, setNotifications] = useState([]);
 
-    const handleExcludeNotification = async () => { 
-        const token = sessionStorage.getItem('token'); 
-        const response = await fetchDeleteNotification({ 
-            token, 
-            notificationId: notification?.ID_NOTIFICACAO, 
-            serverIP 
+  const token = sessionStorage.getItem('token');
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await fetch(`${serverIP}/getUserData`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-access-token': token
+          }
         });
-
-        if (!response.ok) {
-            alert('Erro ao excluir notificação');
-        } else {
-            handleExclusion(notification?.ID_NOTIFICACAO); // Chama a função passada como prop
-        }
-    };
-
-    return (
-        <div className="notification_item" style={isRead ? { color: 'var(--vivo-lightpurple50)' } : { color: 'var(--vivo-green)', fontWeight: '600' }}>
-            <div className="text" onClick={handleOnClick}>
-                {notification?.TEXTO}
-            </div>
-            <div className="actions">
-                <FaTrash className="trash" onClick={handleExcludeNotification} />
-            </div>
-        </div>
-    );
-}
-
-
-export default async function fetchDeleteNotification({ token, notificationId, serverIP }) {
-    try {
-        const response = await fetch(`${serverIP}/deleteNotification/${notificationId}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', 'x-access-token': token }
-        });
-        return response;
-    } catch (error) {
-        console.error(error);
-        return null;
+        const data = await response.json();
+        setUsername(data.NOME);
+        setMoedas(data.MOEDAS);
+        setNivel(data.NIVEL);
+        setXp(data.XP);
+      } catch (error) {
+        console.log('Erro ao buscar os dados:', error);
+      }
     }
+
+    fetchData();
+  }, [serverIP, token]);
+
+  useEffect(() => {
+    async function fetchNotifications() {
+      try {
+        const response = await fetchUserNotifications({ token, serverIP });
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Notificações recebidas:', data);
+          setNotifications(data);
+        } else {
+          console.error('Erro ao buscar notificações:', response.statusText);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar notificações:', error);
+      }
+    }
+
+    fetchNotifications();
+  }, [token, serverIP]);
+
+  useEffect(() => {
+    if (avatar) {
+      setCurrentAvatar(avatar);
+    } else {
+      setCurrentAvatar(usuario);
+    }
+  }, [avatar]);
+
+  // Função para remover notificação da lista
+  const handleExclusion = (idNotification) => {
+    setNotifications((prevNotifications) => 
+      prevNotifications.filter(notification => notification.ID_NOTIFICACAO !== idNotification)
+    );
+  };
+
+  return (
+    <div>
+      <Link to="/Perfil" style={{ textDecoration: 'none' }}>
+        <header className="header-perfil">
+          <Notifications 
+            notification={notifications} 
+            handleExclusion={handleExclusion} // Chama a função para excluir a notificação
+            serverIP={serverIP}
+          />
+          <img className="icon-usuario" src={currentAvatar} alt="usuario" />
+          <div className="info">
+            <div className="nome-e-nivel">
+              <h2 className="subinfo typing-effect">{userName}</h2>
+              <h4 className="subinfo">Nível {nivel}</h4>
+            </div>
+            <div className='subinfo-progresso'>
+              <h4 className="subinfo">EXP </h4>
+              <BarraProgresso xp={xp} />
+            </div>
+            <div className="coin-valor">
+              <img className='coin' src={coin} alt="Ícone de Moedas" />
+              {moedas}
+            </div>
+          </div>
+        </header>
+      </Link>
+    </div>
+  );
 }
+
+export default BoxPerfil;
